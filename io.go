@@ -16,7 +16,7 @@ import (
 	// 编码仍然不支持（见 encode 的 webp 分支）。
 	_ "golang.org/x/image/webp"
 	"io"
-	"io/ioutil"
+
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,11 +73,11 @@ func Decode(r io.Reader, opts ...DecodeOption) (image.Image, error) {
 	go func() {
 		defer close(done)
 		orient = readOrientation(pr)
-		io.Copy(ioutil.Discard, pr)
+		_, _ = io.Copy(io.Discard, pr)
 	}()
 
 	img, _, err := image.Decode(r)
-	pw.Close()
+	_ = pw.Close()
 	<-done
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func Open(filename string, opts ...DecodeOption) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	return Decode(file, opts...)
 }
 
@@ -329,7 +329,7 @@ func readOrientation(r io.Reader) orientation {
 		if size < 2 {
 			return orientationUnspecified // Invalid block size.
 		}
-		if _, err := io.CopyN(ioutil.Discard, r, int64(size-2)); err != nil {
+		if _, err := io.CopyN(io.Discard, r, int64(size-2)); err != nil {
 			return orientationUnspecified
 		}
 	}
@@ -342,7 +342,7 @@ func readOrientation(r io.Reader) orientation {
 	if header != exifHeader {
 		return orientationUnspecified
 	}
-	if _, err := io.CopyN(ioutil.Discard, r, 2); err != nil {
+	if _, err := io.CopyN(io.Discard, r, 2); err != nil {
 		return orientationUnspecified
 	}
 
@@ -362,7 +362,7 @@ func readOrientation(r io.Reader) orientation {
 	default:
 		return orientationUnspecified // Invalid byte order flag.
 	}
-	if _, err := io.CopyN(ioutil.Discard, r, 2); err != nil {
+	if _, err := io.CopyN(io.Discard, r, 2); err != nil {
 		return orientationUnspecified
 	}
 
@@ -374,7 +374,7 @@ func readOrientation(r io.Reader) orientation {
 	if offset < 8 {
 		return orientationUnspecified // Invalid offset value.
 	}
-	if _, err := io.CopyN(ioutil.Discard, r, int64(offset-8)); err != nil {
+	if _, err := io.CopyN(io.Discard, r, int64(offset-8)); err != nil {
 		return orientationUnspecified
 	}
 
@@ -391,12 +391,12 @@ func readOrientation(r io.Reader) orientation {
 			return orientationUnspecified
 		}
 		if tag != orientationTag {
-			if _, err := io.CopyN(ioutil.Discard, r, 10); err != nil {
+			if _, err := io.CopyN(io.Discard, r, 10); err != nil {
 				return orientationUnspecified
 			}
 			continue
 		}
-		if _, err := io.CopyN(ioutil.Discard, r, 6); err != nil {
+		if _, err := io.CopyN(io.Discard, r, 6); err != nil {
 			return orientationUnspecified
 		}
 		var val uint16

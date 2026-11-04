@@ -91,7 +91,7 @@ func OpenAllowed(filename string, allowed ...DecodeFormat) (image.Image, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return DecodeAllowed(f, allowed...)
 }
 
