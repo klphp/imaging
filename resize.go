@@ -86,6 +86,25 @@ func Resize(img image.Image, width, height int, filter ResampleFilter) *image.NR
 		dstH = int(math.Max(1.0, math.Floor(tmpH+0.5)))
 	}
 
+	// ★ 永不放大：**每个维度独立**封顶到源图尺寸。
+	//
+	// 放大只是插值出来的假细节，白白多占内存和带宽，而且调用方通常要的是
+	// "缩到合适大小"，拿到一张糊图只会更差。
+	//
+	// 为什么是逐维度 clamp 而不是「两个维度都不小于源图才返回原图」：
+	// 源 800×600 请求 400×1000 时，宽要缩、高不用。整块跳过缩放会返回
+	// 400×1000（高被放大），而只按 && 判断又会连宽都不缩。逐维封顶后
+	// 得到 400×600 —— 两个方向都没放大。
+	if dstW > srcW {
+		dstW = srcW
+	}
+	if dstH > srcH {
+		dstH = srcH
+	}
+	if dstW == srcW && dstH == srcH {
+		return Clone(img)
+	}
+
 	if filter.Support <= 0 {
 		// Nearest-neighbor special case.
 		return resizeNearest(img, dstW, dstH)
@@ -273,6 +292,21 @@ func Fill(img image.Image, width, height int, anchor Anchor, filter ResampleFilt
 	}
 
 	if srcW == dstW && srcH == dstH {
+		return Clone(img)
+	}
+
+	// ★ 永不放大（与 Resize 一致的约定，逐维封顶）。
+	//
+	// Fill 的语义是"裁剪成目标比例再缩放"，源图比目标小时放大再裁剪
+	// 等于把小图糊成大图。逐维封顶后再走裁剪流程，
+	// 保证输出尺寸不超过源图。
+	if dstW > srcW {
+		dstW = srcW
+	}
+	if dstH > srcH {
+		dstH = srcH
+	}
+	if dstW == srcW && dstH == srcH {
 		return Clone(img)
 	}
 

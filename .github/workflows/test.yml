@@ -32,15 +32,53 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # ★ 默认 shell 在 Windows 上是 pwsh，会把 -coverprofile=coverage.txt
+      # 拆成 "-coverprofile=coverage" + 位置参数 ".txt"，于是 go 报
+      #   no required module provides package .txt
+      #   FAIL    .txt [setup failed]
+      # 2026-11-04 的 CI 就是因此红的（只有 windows 两个矩阵项失败）。
+      #
+      # 用 bash 让三个平台走同一套参数解析（Windows 上有 Git Bash），
+      # 比给单个参数加引号更稳 —— 引号只挡住这一个坑，
+      # 换个带点或空格的参数值又会踩。
       - name: Test
-        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+        shell: bash
+        run: go test -v -race ./...
+
+      # 覆盖率单独一步、只在 ubuntu 上跑：
+      #   · 跨平台各生成一份没有意义
+      #   · 少一个会被各平台 shell 解析差异影响的参数
+      # 用 .out 后缀（Go 生态惯例，coverage.txt 在某些工具链里被误判）
+      - name: Test with coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.go == 'stable'
+        shell: bash
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.go == 'stable'
         uses: codecov/codecov-action@v4
         with:
-          files: ./coverage.txt
+          files: ./coverage.out
           fail_ci_if_error: false
+
+      # 独立验证「拷到别处还能编译」：干净目录 + 不能有指向本机的 replace。
+      # 防的是「本地 replace 让仓库只在开发者机器上能编译」。
+      - name: Verify standalone usability
+        if: matrix.os == 'ubuntu-latest' && matrix.go == 'stable'
+        shell: bash
+        run: |
+          if grep -q '^replace ' go.mod; then
+            echo "::error::go.mod 含 replace，拷到别的项目里会编译失败"
+            grep '^replace ' go.mod
+            exit 1
+          fi
+          tmp=$(mktemp -d)
+          cp -r . "$tmp/imaging"
+          cd "$tmp/imaging"
+          rm -rf .git
+          go build ./...
+          go test ./... -count=1
+          rm -rf "$tmp"
 
   lint:
     runs-on: ubuntu-latest

@@ -31,9 +31,43 @@ for their side effects, which registers them globally with `image.Decode`.
 That is the entry point for [CVE-2023-36308](https://nvd.nist.gov/vuln/detail/CVE-2023-36308)
 — an out-of-bounds read in `scanner.go` triggered by a crafted TIFF.
 
-We don't decode TIFF or BMP, so the imports are gone. Those decoders are now
-**not in the binary at all**: the attack surface goes from *guarded by
-configuration* to *does not exist in the code*.
+We don't decode TIFF or BMP, so the imports are gone. **This library no longer
+registers those decoders** — the CVE entry point is removed from our own code
+path.
+
+> **⚠️ What this does NOT guarantee**
+>
+> Go's `image.Decode` uses a **process-wide registry**. Any program (or any
+> dependency it imports) that does `import _ "golang.org/x/image/tiff"` will
+> register the TIFF decoder globally, and `imaging.Decode` — which delegates to
+> `image.Decode` — will happily decode TIFF again.
+>
+> This is not hypothetical. Verified: a host program with that single blank
+> import can decode a TIFF through `imaging.Decode` even though this library
+> contains no TIFF code at all.
+>
+> So the accurate claim is: *this library is no longer the one registering them*.
+> Not: *the final binary cannot decode them*.
+>
+> **If you need a hard format limit — e.g. an upload endpoint — use
+> `DecodeAllowed`** (below). It sniffs the magic bytes and rejects anything
+> outside your allow-list *before* reaching `image.Decode`, so the global
+> registry never gets a say.
+
+### Enforcing an allow-list
+
+```go
+img, err := imaging.DecodeAllowed(r,
+    imaging.DecodeJPEG, imaging.DecodePNG, imaging.DecodeWebP)
+if errors.Is(err, imaging.ErrFormatNotAllowed) {
+    return fmt.Errorf("unsupported image format")
+}
+```
+
+`DecodeAllowed` reads the header and compares it against the allow-list first.
+Unknown magic → rejected with `ErrFormatNotAllowed`. TIFF/BMP are recognised by
+magic bytes specifically so the error message says `"tiff"` instead of the
+useless "unrecognised format".
 
 ### 2. Fixes the palette-index panic (upstream issue #165)
 
@@ -97,7 +131,7 @@ Requires Go 1.21+.
 
 | | upstream | this fork |
 |---|---|---|
-| TIFF / BMP decode | ✅ (CVE path) | ❌ removed |
+| TIFF / BMP decode | ✅ (CVE path) | ❌ removed (not registered by this lib — use `DecodeAllowed` for a hard limit) |
 | WebP decode | ❌ | ✅ |
 | WebP encode | ❌ | ❌ |
 | Palette index panic (#165) | 💥 | fixed |
