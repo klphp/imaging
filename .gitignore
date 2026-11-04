@@ -1,0 +1,23 @@
+# 编译产物
+*.exe
+*.test
+*.out
+*.so
+*.dylib
+/bin/
+/dist/
+
+# 测试临时文件
+*.prof
+coverage.txt
+coverage.out
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 系统
+.DS_Store
+Thumbs.db
