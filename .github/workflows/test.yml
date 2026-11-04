@@ -90,10 +90,21 @@ jobs:
         with:
           go-version: stable
 
+      # ★ golangci-lint 的**预编译二进制**是用某个固定 Go 版本编译的，
+      # 遇到更新的 go.mod（本项目是 go 1.27.1）会直接拒绝：
+      #
+      #   can't load config: the Go language version (go1.24) used to build
+      #   golangci-lint is lower than the targeted Go version (1.27.1)
+      #
+      # 实测 v1.64.8 就是这么挂的（2026-11-04 的 lint job）。
+      #
+      # install-mode: goinstall 让它用上面 setup-go 装的那个 Go 编译，
+      # 版本永远追得上。代价是每次多编译一两分钟（可以用缓存缓解）。
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: latest
+          install-mode: goinstall
 
   security:
     runs-on: ubuntu-latest
